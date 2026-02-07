@@ -35,7 +35,30 @@ cargo build --release
 
 The binary will be at `target/release/lutrisartfetcher` (≈6 MB with LTO + strip).
 
-### Run directly
+### Add to PATH
+
+To run `lutrisartfetcher` from anywhere, add the release directory to your shell's PATH:
+
+```bash
+# Bash
+echo 'export PATH="$HOME/path/to/LutrisArtFetcher/target/release:$PATH"' >> ~/.bashrc
+source ~/.bashrc
+
+# Zsh
+echo 'export PATH="$HOME/path/to/LutrisArtFetcher/target/release:$PATH"' >> ~/.zshrc
+source ~/.zshrc
+
+# Fish
+fish_add_path $HOME/path/to/LutrisArtFetcher/target/release
+```
+
+Replace `path/to/LutrisArtFetcher` with the actual location of the cloned repo. After that, just run:
+
+```bash
+lutrisartfetcher
+```
+
+### Run directly (without PATH)
 
 ```bash
 cargo run --release
