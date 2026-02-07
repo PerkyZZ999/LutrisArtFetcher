@@ -13,7 +13,10 @@ const BASE_URL: &str = "https://www.steamgriddb.com/api/v2";
 
 /// Async client for the `SteamGridDB` REST API.
 pub struct SteamGridDbClient {
+    /// Authenticated client for API endpoints.
     client: Client,
+    /// Bare client for CDN image downloads (no auth headers).
+    cdn_client: Client,
     request_delay: Duration,
 }
 
@@ -36,8 +39,14 @@ impl SteamGridDbClient {
             .build()
             .wrap_err("Failed to build HTTP client")?;
 
+        let cdn_client = Client::builder()
+            .timeout(Duration::from_secs(60))
+            .build()
+            .wrap_err("Failed to build CDN HTTP client")?;
+
         Ok(Self {
             client,
+            cdn_client,
             request_delay: Duration::from_millis(delay_ms),
         })
     }
@@ -153,9 +162,11 @@ impl SteamGridDbClient {
     }
 
     /// Download raw image bytes from a CDN URL.
+    ///
+    /// Uses a separate client without auth headers — the CDN rejects Bearer tokens.
     pub async fn download_image(&self, url: &str) -> Result<Vec<u8>> {
         let resp = self
-            .client
+            .cdn_client
             .get(url)
             .send()
             .await
