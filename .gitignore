@@ -1,1 +1,21 @@
+# Original Python version (archived)
 /python-version
+
+# Rust build artifacts
+/target
+
+# Environment / secrets
+.env
+.env.*
+*.key
+
+# Editor / IDE
+*.swp
+*.swo
+*~
+.idea/
+.vscode/
+
+# OS files
+.DS_Store
+Thumbs.db

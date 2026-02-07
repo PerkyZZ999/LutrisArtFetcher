@@ -1,0 +1,60 @@
+[package]
+name = "lutrisartfetcher"
+version = "0.1.0"
+edition = "2021"
+description = "TUI tool to download cover art for Lutris games from SteamGridDB"
+license = "MIT"
+rust-version = "1.80"
+
+[dependencies]
+# TUI framework (includes crossterm backend by default)
+ratatui = "0.29"
+
+# Terminal event polling — event-stream enables async-compatible EventStream
+crossterm = { version = "0.28", features = ["event-stream"] }
+
+# Async runtime — multi-thread for concurrent downloads
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "fs", "sync", "time"] }
+
+# HTTP client — rustls-tls avoids OpenSSL system dependency
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+
+# SQLite access — bundled compiles its own SQLite, no system headers needed
+rusqlite = { version = "0.32", features = ["bundled"] }
+
+# Serialization / deserialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# TOML config file support
+toml = "0.8"
+
+# XDG directory resolution (~/.config, ~/.local/share, etc.)
+dirs = "6.0"
+
+# Ergonomic error handling with colorful backtraces
+color-eyre = "0.6"
+
+# CLI argument parsing with derive macros
+clap = { version = "4.5", features = ["derive"] }
+
+# Stream utilities for async crossterm event polling
+futures = "0.3"
+
+[profile.release]
+lto = true
+codegen-units = 1
+strip = true
+
+# Lint configuration per Rust best practices (Chapter 2)
+[lints.rust]
+future-incompatible = "warn"
+nonstandard-style = "deny"
+
+[lints.clippy]
+all = { level = "deny", priority = -1 }
+pedantic = { level = "warn", priority = -1 }
+redundant_clone = "deny"
+needless_collect = "warn"
+large_enum_variant = "warn"
+clone_on_copy = "deny"
