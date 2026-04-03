@@ -20,4 +20,4 @@ target/
 .DS_Store
 Thumbs.db
 
-docs/
+/docs/
