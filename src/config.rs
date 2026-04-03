@@ -4,7 +4,7 @@
 /// and resolving Lutris XDG paths for the database and asset directories.
 use std::path::PathBuf;
 
-use color_eyre::eyre::{Context, Result, eyre};
+use color_eyre::eyre::{eyre, Context, Result};
 use serde::{Deserialize, Serialize};
 
 /// Application configuration persisted as TOML.
@@ -105,12 +105,10 @@ impl Config {
     pub fn save(&self) -> Result<()> {
         let path = config_path();
         if let Some(parent) = path.parent() {
-            std::fs::create_dir_all(parent)
-                .wrap_err("Failed to create config directory")?;
+            std::fs::create_dir_all(parent).wrap_err("Failed to create config directory")?;
         }
 
-        let content = toml::to_string_pretty(self)
-            .wrap_err("Failed to serialize config")?;
+        let content = toml::to_string_pretty(self).wrap_err("Failed to serialize config")?;
 
         std::fs::write(&path, content)
             .wrap_err_with(|| format!("Failed to write config to {}", path.display()))?;
@@ -141,8 +139,7 @@ pub fn config_path() -> PathBuf {
 
 /// Lutris XDG data directory: `$XDG_DATA_HOME/lutris/`
 pub fn lutris_data_dir() -> Result<PathBuf> {
-    let data = dirs::data_dir()
-        .ok_or_else(|| eyre!("Cannot determine XDG data directory"))?;
+    let data = dirs::data_dir().ok_or_else(|| eyre!("Cannot determine XDG data directory"))?;
     Ok(data.join("lutris"))
 }
 
@@ -160,8 +157,7 @@ pub fn lutris_asset_dir(subdir: &str) -> Result<PathBuf> {
 
 /// Resolve the Lutris icons directory (separate XDG location).
 pub fn lutris_icon_dir() -> Result<PathBuf> {
-    let data = dirs::data_dir()
-        .ok_or_else(|| eyre!("Cannot determine XDG data directory"))?;
+    let data = dirs::data_dir().ok_or_else(|| eyre!("Cannot determine XDG data directory"))?;
     Ok(data.join("icons/hicolor/128x128/apps"))
 }
 
@@ -175,8 +171,14 @@ mod tests {
         let serialized = toml::to_string_pretty(&config).unwrap();
         let deserialized: Config = toml::from_str(&serialized).unwrap();
 
-        assert_eq!(config.preferred_grid_dimension, deserialized.preferred_grid_dimension);
-        assert_eq!(config.max_concurrent_downloads, deserialized.max_concurrent_downloads);
+        assert_eq!(
+            config.preferred_grid_dimension,
+            deserialized.preferred_grid_dimension
+        );
+        assert_eq!(
+            config.max_concurrent_downloads,
+            deserialized.max_concurrent_downloads
+        );
         assert_eq!(config.nsfw_filter, deserialized.nsfw_filter);
         assert_eq!(config.humor_filter, deserialized.humor_filter);
         assert_eq!(config.request_delay_ms, deserialized.request_delay_ms);

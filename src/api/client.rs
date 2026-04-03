@@ -4,7 +4,7 @@
 /// and downloading images. Includes configurable request delay to respect rate limits.
 use std::time::Duration;
 
-use color_eyre::eyre::{Context, Result, eyre};
+use color_eyre::eyre::{eyre, Context, Result};
 use reqwest::Client;
 
 use super::models::{ApiResponse, AssetType, ImageAsset, SearchResult};
@@ -56,7 +56,12 @@ impl SteamGridDbClient {
     /// Returns `true` if the server responds with 200.
     pub async fn validate_key(&self) -> Result<bool> {
         let url = format!("{BASE_URL}/grids/game/1?dimensions=600x900");
-        let resp = self.client.get(&url).send().await.wrap_err("Key validation request failed")?;
+        let resp = self
+            .client
+            .get(&url)
+            .send()
+            .await
+            .wrap_err("Key validation request failed")?;
         Ok(resp.status().is_success())
     }
 
@@ -139,14 +144,9 @@ impl SteamGridDbClient {
         }
         self.delay().await;
 
-        let resp = self
-            .client
-            .get(&url)
-            .send()
-            .await
-            .wrap_err_with(|| {
-                format!("Platform asset request failed for {platform}/{platform_id}")
-            })?;
+        let resp = self.client.get(&url).send().await.wrap_err_with(|| {
+            format!("Platform asset request failed for {platform}/{platform_id}")
+        })?;
 
         if !resp.status().is_success() {
             // Platform lookup can 404 for non-Steam games; not an error per se
@@ -176,10 +176,7 @@ impl SteamGridDbClient {
             return Err(eyre!("Image download returned status {}", resp.status()));
         }
 
-        let bytes = resp
-            .bytes()
-            .await
-            .wrap_err("Failed to read image bytes")?;
+        let bytes = resp.bytes().await.wrap_err("Failed to read image bytes")?;
         Ok(bytes.to_vec())
     }
 

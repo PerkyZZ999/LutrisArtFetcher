@@ -1,6 +1,6 @@
 # Lutris Art Fetcher
 
-A fast, interactive TUI application that downloads cover art (grids, heroes, logos, and icons) for your installed [Lutris](https://lutris.net/) games from [SteamGridDB](https://www.steamgriddb.com/).
+A fast, interactive TUI application that downloads cover art (grids, heroes, logos, and icons) for your installed [Lutris](https://lutris.net/) games by fetching artwork from [SteamGridDB](https://www.steamgriddb.com/) and the Steam Store.
 
 ![Rust](https://img.shields.io/badge/Rust-2021-orange)
 ![License](https://img.shields.io/badge/license-MIT-blue)
@@ -10,6 +10,7 @@ A fast, interactive TUI application that downloads cover art (grids, heroes, log
 - **Full TUI** — interactive terminal interface built with [ratatui](https://ratatui.rs/)
 - **4 asset types** — grids, heroes, logos, and icons
 - **Smart matching** — resolves games by Steam app ID first, falls back to name search
+- **Steam + SteamGridDB sources** — fetches artwork from SteamGridDB first, then uses Steam Store assets when needed
 - **Concurrent downloads** — configurable parallelism with semaphore-limited tasks
 - **Atomic writes** — saves images via `.tmp` → `rename` to prevent corruption
 - **Headless mode** — `--no-tui` for scripting and CI
@@ -20,7 +21,8 @@ A fast, interactive TUI application that downloads cover art (grids, heroes, log
 ## Requirements
 
 - Rust 1.80+ (builds SQLite from source via `rusqlite` bundled feature)
-- A [SteamGridDB API key](https://www.steamgriddb.com/profile/preferences/api) (free)
+- A [SteamGridDB API key](https://www.steamgriddb.com/profile/preferences/api) (free, still required)
+- No Steam API key required for Steam Store fetching
 - Lutris installed with at least one game
 
 ## Installation

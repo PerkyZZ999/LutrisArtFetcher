@@ -1,4 +1,5 @@
-/// Lutris Art Fetcher — download cover art for Lutris games from `SteamGridDB`.
+/// Lutris Art Fetcher — download cover art for Lutris games from `SteamGridDB`
+/// with Steam Store fallback.
 ///
 /// A modern TUI application built with ratatui. Reads installed games from the
 /// Lutris `SQLite` database and downloads grids, heroes, logos, and icons.
@@ -14,14 +15,27 @@ mod ui;
 use std::collections::HashSet;
 
 use clap::Parser;
-use color_eyre::eyre::{Context, Result, eyre};
+use color_eyre::eyre::{eyre, Context, Result};
 
 use crate::api::models::AssetType;
-use crate::api::SteamGridDbClient;
+use crate::api::{SteamGridDbClient, SteamStoreClient};
 use crate::app::App;
 use crate::config::Config;
 use crate::download::{asset_exists, asset_path};
 use crate::event::{AppEvent, EventHandler};
+
+fn display_name_for_progress(games: &[db::Game], slug: &str) -> String {
+    let mut matches = games.iter().filter(|g| g.slug == slug);
+    let Some(first) = matches.next() else {
+        return slug.to_owned();
+    };
+
+    if matches.next().is_some() {
+        slug.to_owned()
+    } else {
+        first.name.clone()
+    }
+}
 
 // ---------------------------------------------------------------------------
 // CLI
@@ -30,7 +44,7 @@ use crate::event::{AppEvent, EventHandler};
 #[derive(Parser, Debug)]
 #[command(
     name = "lutrisartfetcher",
-    about = "Download cover art for Lutris games from SteamGridDB",
+    about = "Download cover art for Lutris games from SteamGridDB with Steam Store fallback",
     version
 )]
 struct Cli {
@@ -47,7 +61,11 @@ struct Cli {
     dry_run: bool,
 
     /// Asset types to download (comma-separated: grids,heroes,logos,icons).
-    #[arg(long, value_delimiter = ',', default_value = "grids,heroes,logos,icons")]
+    #[arg(
+        long,
+        value_delimiter = ',',
+        default_value = "grids,heroes,logos,icons"
+    )]
     assets: Vec<String>,
 
     /// Max parallel downloads.
@@ -156,12 +174,12 @@ async fn run_headless(
     assets: HashSet<AssetType>,
     force: bool,
 ) -> Result<()> {
-    let api_key = config
-        .api_key
-        .as_deref()
-        .ok_or_else(|| eyre!("No API key configured. Run without --no-tui to set one interactively."))?;
+    let api_key = config.api_key.as_deref().ok_or_else(|| {
+        eyre!("No API key configured. Run without --no-tui to set one interactively.")
+    })?;
 
     let client = SteamGridDbClient::new(api_key, config.request_delay_ms)?;
+    let steam_client = SteamStoreClient::new(config.request_delay_ms)?;
 
     println!("Found {} installed games", games.len());
     println!(
@@ -193,6 +211,7 @@ async fn run_headless(
     tokio::spawn(async move {
         download::download_all(
             &client,
+            &steam_client,
             &games_clone,
             &assets_clone,
             &opts,
@@ -208,10 +227,7 @@ async fn run_headless(
     let mut failed = 0u32;
 
     while let Some(progress) = rx.recv().await {
-        let display = games
-            .iter()
-            .find(|g| g.slug == progress.game_slug)
-            .map_or_else(|| progress.game_slug.clone(), |g| g.name.clone());
+        let display = display_name_for_progress(&games, &progress.game_slug);
 
         match &progress.status {
             api::models::DownloadStatus::Done(path) => {
@@ -226,11 +242,9 @@ async fn run_headless(
                 failed += 1;
                 println!("  ✗ {display} — {} failed: {msg}", progress.asset_type);
             }
-            api::models::DownloadStatus::Searching => {
-                print!("  ⟳ Searching for {display}...");
-            }
+            api::models::DownloadStatus::Searching => {}
             api::models::DownloadStatus::Downloading => {
-                println!(" downloading {}", progress.asset_type);
+                println!("  ↓ {display} — downloading {}", progress.asset_type);
             }
             api::models::DownloadStatus::Pending => {}
         }
@@ -263,7 +277,11 @@ fn run_dry_run(games: &[db::Game], assets: &HashSet<AssetType>) -> Result<()> {
             } else {
                 would_download += 1;
                 let path = asset_path(*asset, &game.slug)?;
-                statuses.push(format!("{}: would download → {}", asset.display_name(), path.display()));
+                statuses.push(format!(
+                    "{}: would download → {}",
+                    asset.display_name(),
+                    path.display()
+                ));
             }
         }
         println!("  {} ({})", game.name, game.slug);

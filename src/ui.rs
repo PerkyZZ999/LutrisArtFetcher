@@ -3,11 +3,11 @@
 /// Dispatches to a screen-specific renderer based on `App.screen`, then
 /// optionally overlays the help popup.
 use ratatui::{
-    Frame,
     layout::{Alignment, Constraint, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
     widgets::{Block, Borders, Clear, Gauge, List, ListItem, Paragraph, Wrap},
+    Frame,
 };
 
 use crate::api::models::AssetType;
@@ -74,7 +74,7 @@ fn render_api_key_screen(frame: &mut Frame, app: &App) {
         Constraint::Length(1), // Spacer
         Constraint::Length(3), // Input
         Constraint::Length(2), // Error / status
-        Constraint::Min(0),   // URL info
+        Constraint::Min(0),    // URL info
     ])
     .split(inner);
 
@@ -112,11 +112,10 @@ fn render_api_key_screen(frame: &mut Frame, app: &App) {
     }
 
     // URL info
-    let url_text = Paragraph::new(
-        "Get your key at: https://www.steamgriddb.com/profile/preferences/api",
-    )
-    .alignment(Alignment::Center)
-    .style(Style::default().fg(MUTED_COLOR));
+    let url_text =
+        Paragraph::new("Get your key at: https://www.steamgriddb.com/profile/preferences/api")
+            .alignment(Alignment::Center)
+            .style(Style::default().fg(MUTED_COLOR));
     frame.render_widget(url_text, chunks[4]);
 }
 
@@ -140,16 +139,17 @@ fn render_asset_selection(frame: &mut Frame, app: &App) {
     let inner = centered_rect(50, 50, area);
 
     let chunks = Layout::vertical([
-        Constraint::Length(2),  // Instructions
-        Constraint::Length(1),  // Spacer
+        Constraint::Length(2), // Instructions
+        Constraint::Length(1), // Spacer
         Constraint::Min(6),    // List
-        Constraint::Length(2),  // Footer
+        Constraint::Length(2), // Footer
     ])
     .split(inner);
 
-    let instructions = Paragraph::new("Select which asset types to download (Space to toggle, 'a' for all):")
-        .alignment(Alignment::Center)
-        .style(Style::default().fg(INFO_COLOR));
+    let instructions =
+        Paragraph::new("Select which asset types to download (Space to toggle, 'a' for all):")
+            .alignment(Alignment::Center)
+            .style(Style::default().fg(INFO_COLOR));
     frame.render_widget(instructions, chunks[0]);
 
     let all_types = AssetType::all();
@@ -213,11 +213,8 @@ fn render_main_view(frame: &mut Frame, app: &App) {
     .split(inner);
 
     // Horizontal split: game list (60%) | status (40%)
-    let top_chunks = Layout::horizontal([
-        Constraint::Percentage(60),
-        Constraint::Percentage(40),
-    ])
-    .split(main_chunks[0]);
+    let top_chunks = Layout::horizontal([Constraint::Percentage(60), Constraint::Percentage(40)])
+        .split(main_chunks[0]);
 
     render_game_list(frame, app, top_chunks[0]);
     render_status_panel(frame, app, top_chunks[1]);
@@ -278,21 +275,23 @@ fn render_status_panel(frame: &mut Frame, app: &App, area: Rect) {
         Constraint::Length(1), // Spacer
         Constraint::Length(3), // Progress gauge
         Constraint::Length(1), // Spacer
-        Constraint::Min(2),   // Current info
+        Constraint::Min(2),    // Current info
     ])
     .split(inner);
 
     // Mode line
-    let asset_names: Vec<&str> = app.selected_assets.iter().map(|a| a.display_name()).collect();
+    let asset_names: Vec<&str> = app
+        .selected_assets
+        .iter()
+        .map(|a| a.display_name())
+        .collect();
     let mode = Paragraph::new(format!(" Mode: {}", asset_names.join(", ")))
         .style(Style::default().fg(INFO_COLOR));
     frame.render_widget(mode, chunks[0]);
 
     // Progress gauge
     match &app.screen {
-        AppScreen::Downloading {
-            current, total, ..
-        } => {
+        AppScreen::Downloading { current, total, .. } => {
             #[allow(clippy::cast_precision_loss)]
             let progress = if *total == 0 {
                 1.0
@@ -301,7 +300,12 @@ fn render_status_panel(frame: &mut Frame, app: &App, area: Rect) {
             };
             let label = format!("{current} / {total}");
             let gauge = Gauge::default()
-                .block(Block::default().title(" Progress ").borders(Borders::ALL).border_style(Style::default().fg(BORDER_COLOR)))
+                .block(
+                    Block::default()
+                        .title(" Progress ")
+                        .borders(Borders::ALL)
+                        .border_style(Style::default().fg(BORDER_COLOR)),
+                )
                 .gauge_style(Style::default().fg(SUCCESS_COLOR).bg(Color::DarkGray))
                 .ratio(progress.min(1.0))
                 .label(label);
@@ -317,10 +321,8 @@ fn render_status_panel(frame: &mut Frame, app: &App, area: Rect) {
                         .all(|a| download::asset_exists(*a, &e.game.slug))
                 })
                 .count();
-            let info = Paragraph::new(format!(
-                " {existing} games already have all selected art"
-            ))
-            .style(Style::default().fg(MUTED_COLOR));
+            let info = Paragraph::new(format!(" {existing} games already have all selected art"))
+                .style(Style::default().fg(MUTED_COLOR));
             frame.render_widget(info, chunks[2]);
         }
         _ => {}
@@ -329,12 +331,12 @@ fn render_status_panel(frame: &mut Frame, app: &App, area: Rect) {
     // Current game info
     if let Some(selected) = app.list_state.selected() {
         if let Some(entry) = app.games.get(selected) {
-            let mut lines = vec![
-                Line::from(Span::styled(
-                    format!(" {}", entry.game.name),
-                    Style::default().fg(TITLE_COLOR).add_modifier(Modifier::BOLD),
-                )),
-            ];
+            let mut lines = vec![Line::from(Span::styled(
+                format!(" {}", entry.game.name),
+                Style::default()
+                    .fg(TITLE_COLOR)
+                    .add_modifier(Modifier::BOLD),
+            ))];
             if let Some(ref runner) = entry.game.runner {
                 lines.push(Line::from(Span::styled(
                     format!(" Runner: {runner}"),
@@ -420,12 +422,12 @@ fn render_done_screen(frame: &mut Frame, app: &App) {
     let inner = centered_rect(50, 50, area);
 
     let chunks = Layout::vertical([
-        Constraint::Length(2),  // Header
-        Constraint::Length(1),  // Spacer
-        Constraint::Length(6),  // Stats
-        Constraint::Length(1),  // Spacer
-        Constraint::Min(6),     // Log tail
-        Constraint::Length(1),  // Footer
+        Constraint::Length(2), // Header
+        Constraint::Length(1), // Spacer
+        Constraint::Length(6), // Stats
+        Constraint::Length(1), // Spacer
+        Constraint::Min(6),    // Log tail
+        Constraint::Length(1), // Footer
     ])
     .split(inner);
 
@@ -510,7 +512,9 @@ fn render_help_popup(frame: &mut Frame) {
     let help_text = vec![
         Line::from(Span::styled(
             " Keybindings",
-            Style::default().fg(TITLE_COLOR).add_modifier(Modifier::BOLD),
+            Style::default()
+                .fg(TITLE_COLOR)
+                .add_modifier(Modifier::BOLD),
         )),
         Line::from(""),
         Line::from(" Navigation"),

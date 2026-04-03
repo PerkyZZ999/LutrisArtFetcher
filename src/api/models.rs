@@ -2,7 +2,7 @@
 use std::fmt;
 use std::path::PathBuf;
 
-use color_eyre::eyre::{Result, eyre};
+use color_eyre::eyre::{eyre, Result};
 use serde::{Deserialize, Serialize};
 
 // ---------------------------------------------------------------------------

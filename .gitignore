@@ -1,8 +1,8 @@
 # Original Python version (archived)
-/python-version
+python-version/
 
 # Rust build artifacts
-/target
+target/
 
 # Environment / secrets
 .env
@@ -19,3 +19,5 @@
 # OS files
 .DS_Store
 Thumbs.db
+
+docs/

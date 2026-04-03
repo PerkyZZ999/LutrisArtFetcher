@@ -8,7 +8,7 @@ use ratatui::widgets::ListState;
 use tokio::sync::mpsc::{self, UnboundedSender};
 
 use crate::api::models::{AssetType, DownloadProgress, DownloadStatus};
-use crate::api::SteamGridDbClient;
+use crate::api::{SteamGridDbClient, SteamStoreClient};
 use crate::config::Config;
 use crate::db::Game;
 use crate::download::{self, GameEntry};
@@ -81,12 +81,7 @@ pub struct App {
 
 impl App {
     /// Initialize the app. Decides the starting screen based on config state.
-    pub fn new(
-        config: Config,
-        games: Vec<Game>,
-        assets: HashSet<AssetType>,
-        force: bool,
-    ) -> Self {
+    pub fn new(config: Config, games: Vec<Game>, assets: HashSet<AssetType>, force: bool) -> Self {
         let entries: Vec<GameEntry> = games.into_iter().map(GameEntry::new).collect();
 
         let screen = if config.api_key.is_none() {
@@ -319,10 +314,7 @@ impl App {
     // -- Done ---------------------------------------------------------------
 
     fn handle_done(&mut self, key: KeyEvent) {
-        if matches!(
-            key.code,
-            KeyCode::Char('q') | KeyCode::Esc | KeyCode::Enter
-        ) {
+        if matches!(key.code, KeyCode::Char('q') | KeyCode::Esc | KeyCode::Enter) {
             self.should_quit = true;
         }
     }
@@ -353,6 +345,9 @@ impl App {
             let Ok(client) = SteamGridDbClient::new(&api_key, delay) else {
                 return;
             };
+            let Ok(steam_client) = SteamStoreClient::new(delay) else {
+                return;
+            };
             let opts = download::DownloadOpts {
                 grid_dim: grid_dim.clone(),
                 nsfw_filter: nsfw,
@@ -372,7 +367,13 @@ impl App {
             });
 
             download::download_all(
-                &client, &games, &assets, &opts, max_conc, dl_tx,
+                &client,
+                &steam_client,
+                &games,
+                &assets,
+                &opts,
+                max_conc,
+                dl_tx,
             )
             .await;
             let _ = fwd.await;

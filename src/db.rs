@@ -5,7 +5,7 @@
 /// the connection before any async work begins (rusqlite `Connection` is not `Send`).
 use std::path::Path;
 
-use color_eyre::eyre::{Context, Result, eyre};
+use color_eyre::eyre::{eyre, Context, Result};
 use rusqlite::Connection;
 
 /// A game entry read from the Lutris database.
@@ -37,10 +37,7 @@ pub fn validate_db(path: &Path) -> Result<()> {
     }
 
     if !path.is_file() {
-        return Err(eyre!(
-            "{} exists but is not a regular file",
-            path.display()
-        ));
+        return Err(eyre!("{} exists but is not a regular file", path.display()));
     }
 
     // Verify we can actually read it
@@ -76,7 +73,8 @@ pub fn get_installed_games(path: &Path) -> Result<Vec<Game>> {
          ORDER BY name COLLATE NOCASE"
     );
 
-    let mut stmt = conn.prepare(&query)
+    let mut stmt = conn
+        .prepare(&query)
         .wrap_err("Failed to prepare games query")?;
 
     let games = stmt

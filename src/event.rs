@@ -4,7 +4,7 @@
 /// then exposes a unified `AppEvent` stream consumed by the main loop.
 use std::time::Duration;
 
-use color_eyre::eyre::{Result, eyre};
+use color_eyre::eyre::{eyre, Result};
 use crossterm::event::{Event, EventStream};
 use futures::StreamExt;
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
