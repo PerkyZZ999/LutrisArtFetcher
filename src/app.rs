@@ -293,14 +293,37 @@ impl App {
                 let i = self.list_state.selected().unwrap_or(0);
                 self.list_state.select(Some((i + 10).min(len - 1)));
             }
-            KeyCode::Enter => {
-                self.start_downloads(tx);
+            KeyCode::Char(' ') => {
+                if let Some(i) = self.list_state.selected() {
+                    if let Some(entry) = self.games.get_mut(i) {
+                        entry.selected = !entry.selected;
+                    }
+                }
             }
-            KeyCode::Esc | KeyCode::Char('q') => {
+            KeyCode::Char('a') => {
+                let all_selected = self.games.iter().all(|e| e.selected);
+                for entry in &mut self.games {
+                    entry.selected = !all_selected;
+                }
+            }
+            KeyCode::Enter => {
+                if self.games.iter().any(|e| e.selected) {
+                    self.start_downloads(tx);
+                }
+            }
+            KeyCode::Esc => {
+                self.screen = AppScreen::AssetTypeSelection { cursor: 0 };
+            }
+            KeyCode::Char('q') => {
                 self.should_quit = true;
             }
             _ => {}
         }
+    }
+
+    /// Number of games currently marked for download.
+    pub fn selected_game_count(&self) -> usize {
+        self.games.iter().filter(|e| e.selected).count()
     }
 
     // -- Downloading --------------------------------------------------------
@@ -323,14 +346,20 @@ impl App {
 
     /// Kick off the download pipeline in a background task.
     fn start_downloads(&mut self, tx: &UnboundedSender<AppEvent>) {
-        let total = self.games.len() * self.selected_assets.len();
+        let selected_count = self.selected_game_count();
+        let total = selected_count * self.selected_assets.len();
         self.screen = AppScreen::Downloading {
             current: 0,
             total,
             started_at: Instant::now(),
         };
 
-        let games: Vec<Game> = self.games.iter().map(|e| e.game.clone()).collect();
+        let games: Vec<Game> = self
+            .games
+            .iter()
+            .filter(|e| e.selected)
+            .map(|e| e.game.clone())
+            .collect();
         let assets = self.selected_assets.clone();
         let grid_dim = self.config.preferred_grid_dimension.clone();
         let nsfw = self.config.nsfw_filter;
@@ -483,13 +512,13 @@ impl App {
         }
     }
 
-    /// Count terminal statuses across all game entries.
+    /// Count terminal statuses across selected game entries.
     fn count_results(&self) -> (usize, usize, usize) {
         let mut downloaded = 0usize;
         let mut skipped = 0usize;
         let mut failed = 0usize;
 
-        for entry in &self.games {
+        for entry in self.games.iter().filter(|e| e.selected) {
             for &asset in &self.selected_assets {
                 match entry.status(asset) {
                     DownloadStatus::Done(_) => downloaded += 1,

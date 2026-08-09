@@ -223,7 +223,11 @@ fn render_main_view(frame: &mut Frame, app: &App) {
 }
 
 fn render_game_list(frame: &mut Frame, app: &App, area: Rect) {
-    let title = format!(" Games ({} installed) ", app.games.len());
+    let selected_count = app.selected_game_count();
+    let title = format!(
+        " Games ({selected_count}/{} selected) ",
+        app.games.len()
+    );
     let block = Block::default()
         .title(title)
         .borders(Borders::ALL)
@@ -233,6 +237,7 @@ fn render_game_list(frame: &mut Frame, app: &App, area: Rect) {
         .games
         .iter()
         .map(|entry| {
+            let checked = if entry.selected { "[x]" } else { "[ ]" };
             let icon = entry.overall_icon(&app.selected_assets);
             let icon_color = match icon {
                 "✓" => SUCCESS_COLOR,
@@ -241,9 +246,22 @@ fn render_game_list(frame: &mut Frame, app: &App, area: Rect) {
                 "─" => MUTED_COLOR,
                 _ => INFO_COLOR,
             };
+            let name_style = if entry.selected {
+                Style::default().fg(INFO_COLOR)
+            } else {
+                Style::default().fg(MUTED_COLOR)
+            };
             let line = Line::from(vec![
-                Span::styled(format!(" {icon} "), Style::default().fg(icon_color)),
-                Span::raw(&entry.game.name),
+                Span::styled(
+                    format!(" {checked} "),
+                    if entry.selected {
+                        Style::default().fg(SUCCESS_COLOR)
+                    } else {
+                        Style::default().fg(MUTED_COLOR)
+                    },
+                ),
+                Span::styled(format!("{icon} "), Style::default().fg(icon_color)),
+                Span::styled(entry.game.name.as_str(), name_style),
             ]);
             ListItem::new(line)
         })
@@ -312,17 +330,27 @@ fn render_status_panel(frame: &mut Frame, app: &App, area: Rect) {
             frame.render_widget(gauge, chunks[2]);
         }
         AppScreen::GameList => {
+            let selected_count = app.selected_game_count();
             let existing: usize = app
                 .games
                 .iter()
+                .filter(|e| e.selected)
                 .filter(|e| {
                     app.selected_assets
                         .iter()
                         .all(|a| download::asset_exists(*a, &e.game.slug))
                 })
                 .count();
-            let info = Paragraph::new(format!(" {existing} games already have all selected art"))
-                .style(Style::default().fg(MUTED_COLOR));
+            let info = Paragraph::new(vec![
+                Line::from(Span::styled(
+                    format!(" {selected_count} game(s) selected for download"),
+                    Style::default().fg(INFO_COLOR),
+                )),
+                Line::from(Span::styled(
+                    format!(" {existing} already have all selected art"),
+                    Style::default().fg(MUTED_COLOR),
+                )),
+            ]);
             frame.render_widget(info, chunks[2]);
         }
         _ => {}
@@ -386,7 +414,9 @@ fn render_log_panel(frame: &mut Frame, app: &App, area: Rect) {
 
 fn render_footer(frame: &mut Frame, app: &App, area: Rect) {
     let text = match &app.screen {
-        AppScreen::GameList => " q:Quit  Enter:Start All  ↑↓:Navigate  ?:Help",
+        AppScreen::GameList => {
+            " q:Quit  Esc:Back  Enter:Start  Space:Toggle  a:All  ↑↓:Navigate  ?:Help"
+        }
         AppScreen::Downloading { .. } => " q:Quit  ?:Help  (downloading...)",
         _ => " q:Quit  ?:Help",
     };
@@ -524,13 +554,14 @@ fn render_help_popup(frame: &mut Frame) {
         Line::from("  Home/End   Jump to first/last"),
         Line::from(""),
         Line::from(" Actions"),
-        Line::from("  Enter      Confirm / Start downloads"),
-        Line::from("  Space      Toggle selection"),
-        Line::from("  a          Toggle all (asset selection)"),
+        Line::from("  Enter      Confirm / Start downloads (selected games)"),
+        Line::from("  Space      Toggle game / asset selection"),
+        Line::from("  a          Toggle all games / assets"),
+        Line::from("  Esc        Go back / Quit"),
         Line::from(""),
         Line::from(" General"),
         Line::from("  ?          Toggle this help"),
-        Line::from("  q / Esc    Quit"),
+        Line::from("  q          Quit"),
         Line::from("  Ctrl+C     Force quit"),
     ];
 

@@ -18,6 +18,8 @@ use crate::db::Game;
 #[allow(dead_code)]
 pub struct GameEntry {
     pub game: Game,
+    /// Whether this game is selected for download in the TUI game list.
+    pub selected: bool,
     pub grid_status: DownloadStatus,
     pub hero_status: DownloadStatus,
     pub logo_status: DownloadStatus,
@@ -30,6 +32,7 @@ impl GameEntry {
     pub fn new(game: Game) -> Self {
         Self {
             game,
+            selected: true,
             grid_status: DownloadStatus::Pending,
             hero_status: DownloadStatus::Pending,
             logo_status: DownloadStatus::Pending,
