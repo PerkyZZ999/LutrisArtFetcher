@@ -8,6 +8,7 @@ A fast, interactive TUI application that downloads cover art (grids, heroes, log
 ## Features
 
 - **Full TUI** — interactive terminal interface built with [ratatui](https://ratatui.rs/)
+- **Selectable games** — choose which games to download art for (Space to toggle, `a` for all)
 - **4 asset types** — grids, heroes, logos, and icons
 - **Smart matching** — resolves games by Steam app ID first, falls back to name search
 - **Steam + SteamGridDB sources** — fetches artwork from SteamGridDB first, then uses Steam Store assets when needed
@@ -76,8 +77,8 @@ cargo run --release
 
 1. Enter your SteamGridDB API key (saved for future runs)
 2. Select which asset types to download
-3. Review your game list
-4. Press Enter to start downloading
+3. Review your game list — all games start selected; use Space to unselect specific games, or `a` to toggle all
+4. Press Enter to start downloading only the selected games
 5. Watch real-time progress
 
 ### Headless mode
@@ -140,10 +141,11 @@ Restart Lutris after downloading to see the new art.
 | `k` / `↑` | Move up |
 | `PgDn` / `PgUp` | Page down / up |
 | `Home` / `End` | Jump to first / last |
-| `Space` | Toggle selection |
-| `a` | Toggle all |
-| `Enter` | Confirm / proceed |
-| `q` / `Esc` | Quit / go back |
+| `Space` | Toggle game or asset selection |
+| `a` | Toggle all games or assets |
+| `Enter` | Confirm / start downloads for selected games |
+| `Esc` | Go back (game list) / Quit |
+| `q` | Quit |
 | `?` | Toggle help |
 | `Ctrl+C` | Force quit |
 
