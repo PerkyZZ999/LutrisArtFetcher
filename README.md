@@ -54,7 +54,7 @@ cd LutrisArtFetcher
 cargo build --release
 ```
 
-The binary will be at `target/release/lutrisartfetcher` (≈6 MB with LTO + strip).
+The binary will be at `target/release/lutrisartfetcher` (≈9 MB with LTO + strip).
 
 ## Usage
 
