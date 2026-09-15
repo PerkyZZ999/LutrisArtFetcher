@@ -1,32 +1,50 @@
 # Lutris Art Fetcher
 
-A fast, interactive TUI application that downloads cover art (grids, heroes, logos, and icons) for your installed [Lutris](https://lutris.net/) games by fetching artwork from [SteamGridDB](https://www.steamgriddb.com/) and the Steam Store.
-
 ![Rust](https://img.shields.io/badge/Rust-2021-orange)
 ![License](https://img.shields.io/badge/license-MIT-blue)
+
+A fast, interactive TUI that downloads cover art (grids, heroes, logos, and icons) for your installed [Lutris](https://lutris.net/) games — fetched from [SteamGridDB](https://www.steamgriddb.com/) with Steam Store fallback.
+
+![Lutris Art Fetcher TUI](assets/tui.svg)
 
 ## Features
 
 - **Full TUI** — interactive terminal interface built with [ratatui](https://ratatui.rs/)
-- **Selectable games** — choose which games to download art for (Space to toggle, `a` for all)
+- **Selectable games** — fetch art for your whole library or just a few games (`Space` to toggle, `a` for all, `/` to filter)
 - **4 asset types** — grids, heroes, logos, and icons
 - **Smart matching** — resolves games by Steam app ID first, falls back to name search
-- **Steam + SteamGridDB sources** — fetches artwork from SteamGridDB first, then uses Steam Store assets when needed
+- **Steam + SteamGridDB sources** — SteamGridDB first, Steam Store assets when needed
 - **Concurrent downloads** — configurable parallelism with semaphore-limited tasks
 - **Atomic writes** — saves images via `.tmp` → `rename` to prevent corruption
 - **Headless mode** — `--no-tui` for scripting and CI
 - **Dry-run mode** — `--dry-run` to preview what would be downloaded
 - **XDG config** — persists API key and preferences at `~/.config/lutrisartfetcher/config.toml`
-- **Vim keybindings** — `j`/`k` navigation, `Space` to select games, `/` to filter, `?` for help
+- **Vim keybindings** — `j`/`k` navigation, `Space` to select, `/` to filter, `?` for help
 
 ## Requirements
 
-- Rust 1.85+ (builds SQLite from source via `rusqlite` bundled feature)
+- Rust 1.85+ (only to build from source; the prebuilt binary needs nothing)
 - A [SteamGridDB API key](https://www.steamgriddb.com/profile/preferences/api) (free, still required)
 - No Steam API key required for Steam Store fetching
 - Lutris installed with at least one game
 
 ## Installation
+
+### Prebuilt binary (recommended)
+
+Grab the latest release for Linux x86_64 — no Rust toolchain needed:
+
+```bash
+curl -L -o lutrisartfetcher https://github.com/PerkyZZ999/LutrisArtFetcher/releases/download/v0.1.0/lutrisartfetcher-linux-x86_64
+chmod +x lutrisartfetcher
+./lutrisartfetcher
+```
+
+Move it somewhere on your `PATH` to run it from anywhere:
+
+```bash
+mkdir -p ~/.local/bin && mv lutrisartfetcher ~/.local/bin/
+```
 
 ### From source
 
@@ -38,59 +56,30 @@ cargo build --release
 
 The binary will be at `target/release/lutrisartfetcher` (≈6 MB with LTO + strip).
 
-### Add to PATH
-
-To run `lutrisartfetcher` from anywhere, add the release directory to your shell's PATH:
-
-```bash
-# Bash
-echo 'export PATH="$HOME/path/to/LutrisArtFetcher/target/release:$PATH"' >> ~/.bashrc
-source ~/.bashrc
-
-# Zsh
-echo 'export PATH="$HOME/path/to/LutrisArtFetcher/target/release:$PATH"' >> ~/.zshrc
-source ~/.zshrc
-
-# Fish
-fish_add_path $HOME/path/to/LutrisArtFetcher/target/release
-```
-
-Replace `path/to/LutrisArtFetcher` with the actual location of the cloned repo. After that, just run:
-
-```bash
-lutrisartfetcher
-```
-
-### Run directly (without PATH)
-
-```bash
-cargo run --release
-```
-
 ## Usage
 
 ### Interactive TUI (default)
 
 ```bash
-./target/release/lutrisartfetcher
+lutrisartfetcher
 ```
 
 1. Enter your SteamGridDB API key (saved for future runs)
 2. Select which asset types to download
-3. Review your game list — all games start selected; `Space` unselects, `a` toggles all, `/` filters
-4. Press Enter to start downloading only the selected games
-5. Watch real-time progress
+3. Review your game list — everything starts selected; `Space` toggles a game, `a` toggles all, `/` filters by name
+4. Press `Enter` to download art for the selected games only
+5. Watch real-time progress per game and asset
 
 ### Headless mode
 
 ```bash
-./target/release/lutrisartfetcher --no-tui
+lutrisartfetcher --no-tui
 ```
 
 ### Dry run
 
 ```bash
-./target/release/lutrisartfetcher --dry-run
+lutrisartfetcher --dry-run
 ```
 
 ### CLI options
@@ -151,6 +140,17 @@ Restart Lutris after downloading to see the new art.
 | `?` | Toggle help |
 | `Ctrl+C` | Force quit |
 
+## Development
+
+This project uses the `rust-tc` quality gates (see `AGENTS.md`):
+
+```bash
+rust-tc quick    # fmt + check + clippy + tests — after meaningful edits
+rust-tc doctor   # full gate (deps, features) — before finishing work
+```
+
+The README screenshot (`assets/tui.svg`) is generated from the real UI by a test — it refreshes on every `cargo test` run, so it never goes stale.
+
 ## Project structure
 
 ```
@@ -161,12 +161,14 @@ src/
 ├── api/
 │   ├── mod.rs       # Module re-exports
 │   ├── models.rs    # API response types + enums
-│   └── client.rs    # SteamGridDB HTTP client
+│   ├── client.rs    # SteamGridDB HTTP client
+│   └── steam_store.rs # Steam Store fallback client
 ├── download.rs      # Download orchestration + atomic writes
 ├── tui.rs           # Terminal lifecycle (raw mode, alternate screen)
 ├── event.rs         # Async event system (keys, ticks, progress)
 ├── app.rs           # State machine + key handling
-└── ui.rs            # ratatui rendering (all screens)
+├── ui.rs            # ratatui rendering (all screens)
+└── screenshot.rs    # Test-only README screenshot generator
 ```
 
 ## License

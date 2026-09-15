@@ -9,6 +9,8 @@ mod config;
 mod db;
 mod download;
 mod event;
+#[cfg(test)]
+mod screenshot;
 mod tui;
 mod ui;
 
