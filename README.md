@@ -30,6 +30,13 @@ A fast, interactive TUI that downloads cover art (grids, heroes, logos, and icon
 
 ## Installation
 
+### Arch Linux (AUR)
+
+```bash
+yay -S lutrisartfetcher
+# or: paru -S lutrisartfetcher
+```
+
 ### Prebuilt binary (recommended)
 
 Grab the latest release for Linux x86_64 — no Rust toolchain needed:
