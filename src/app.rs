@@ -305,6 +305,10 @@ impl App {
                     return; // must select at least one
                 }
                 self.screen = AppScreen::GameList;
+                self.log(
+                    LogLevel::Info,
+                    "Space selects games · a selects all · / filters · Enter starts".into(),
+                );
             }
             KeyCode::Esc | KeyCode::Char('q') => {
                 self.should_quit = true;
@@ -817,5 +821,71 @@ mod tests {
         app.filter_query = "no-such-game".to_owned();
         app.clamp_cursor_to_visible();
         assert_eq!(app.list_state.selected(), None);
+    }
+
+    /// Drive a key through the real `handle_key` dispatch on the game list.
+    fn press(app: &mut App, tx: &UnboundedSender<AppEvent>, code: KeyCode) {
+        app.handle_key(KeyEvent::new(code, KeyModifiers::empty()), tx);
+    }
+
+    fn game_list_app() -> (App, UnboundedSender<AppEvent>) {
+        let mut app = sample_app();
+        app.screen = AppScreen::GameList;
+        let (tx, _rx) = tokio::sync::mpsc::unbounded_channel();
+        (app, tx)
+    }
+
+    #[test]
+    fn space_key_toggles_highlighted_game() {
+        let (mut app, tx) = game_list_app();
+        assert_eq!(app.selected_count(), 3);
+
+        press(&mut app, &tx, KeyCode::Char(' '));
+        assert_eq!(app.selected_count(), 2);
+        assert!(!app.games[0].selected);
+
+        press(&mut app, &tx, KeyCode::Char(' '));
+        assert_eq!(app.selected_count(), 3);
+        assert!(app.games[0].selected);
+    }
+
+    #[test]
+    fn a_key_toggles_all_games() {
+        let (mut app, tx) = game_list_app();
+
+        press(&mut app, &tx, KeyCode::Char('a'));
+        assert_eq!(app.selected_count(), 0);
+
+        press(&mut app, &tx, KeyCode::Char('a'));
+        assert_eq!(app.selected_count(), 3);
+    }
+
+    #[test]
+    fn enter_with_nothing_selected_stays_and_warns() {
+        let (mut app, tx) = game_list_app();
+        press(&mut app, &tx, KeyCode::Char('a')); // deselect all
+        assert_eq!(app.selected_count(), 0);
+
+        press(&mut app, &tx, KeyCode::Enter);
+        assert!(matches!(app.screen, AppScreen::GameList));
+        assert!(app.log.iter().any(|(_, m)| m.contains("Nothing selected")));
+    }
+
+    #[tokio::test]
+    async fn enter_starts_downloads_for_selected_games_only() {
+        let (mut app, tx) = game_list_app();
+        press(&mut app, &tx, KeyCode::Char('a')); // deselect all
+        press(&mut app, &tx, KeyCode::Down); // move to Portal
+        press(&mut app, &tx, KeyCode::Char(' ')); // select only Portal
+        assert_eq!(app.selected_count(), 1);
+
+        press(&mut app, &tx, KeyCode::Enter);
+        match &app.screen {
+            AppScreen::Downloading { total, .. } => {
+                // 1 selected game × 4 asset types.
+                assert_eq!(*total, 4);
+            }
+            other => panic!("expected Downloading, got {other:?}"),
+        }
     }
 }
