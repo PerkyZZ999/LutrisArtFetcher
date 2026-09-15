@@ -2,6 +2,7 @@
 ///
 /// Each download task sends progress updates through an `mpsc` channel so the
 /// TUI can display real-time status.
+use std::cmp::Reverse;
 use std::collections::HashSet;
 use std::path::PathBuf;
 
@@ -22,6 +23,8 @@ pub struct GameEntry {
     pub hero_status: DownloadStatus,
     pub logo_status: DownloadStatus,
     pub icon_status: DownloadStatus,
+    /// Whether this game is selected for download (toggled with Space in the TUI).
+    pub selected: bool,
     /// Cached `SteamGridDB` game ID after first successful search.
     pub steamgriddb_id: Option<u64>,
 }
@@ -34,6 +37,7 @@ impl GameEntry {
             hero_status: DownloadStatus::Pending,
             logo_status: DownloadStatus::Pending,
             icon_status: DownloadStatus::Pending,
+            selected: true,
             steamgriddb_id: None,
         }
     }
@@ -63,6 +67,9 @@ impl GameEntry {
         let statuses: Vec<&DownloadStatus> =
             active_assets.iter().map(|a| self.status(*a)).collect();
 
+        if statuses.is_empty() {
+            return "·";
+        }
         // Any downloading? Show downloading
         if statuses
             .iter()
@@ -76,6 +83,13 @@ impl GameEntry {
             .any(|s| matches!(s, DownloadStatus::Failed(_)))
         {
             return "✗";
+        }
+        // All skipped (nothing to do)? Show muted dash
+        if statuses
+            .iter()
+            .all(|s| matches!(s, DownloadStatus::Skipped(_)))
+        {
+            return "─";
         }
         // All done or skipped? Show done
         if statuses
@@ -106,7 +120,7 @@ pub fn asset_path(asset: AssetType, slug: &str) -> Result<PathBuf> {
 
 /// Check if an asset file already exists on disk.
 pub fn asset_exists(asset: AssetType, slug: &str) -> bool {
-    asset_path(asset, slug).map(|p| p.exists()).unwrap_or(false)
+    matches!(asset_path(asset, slug), Ok(p) if p.exists())
 }
 
 // ---------------------------------------------------------------------------
@@ -148,14 +162,13 @@ fn token_overlap_score(target: &str, candidate: &str) -> i32 {
         return 0;
     }
 
-    let common = target_tokens.intersection(&candidate_tokens).count() as i32;
-    let union = target_tokens.union(&candidate_tokens).count() as i32;
+    let common = target_tokens.intersection(&candidate_tokens).count();
+    let union = target_tokens.union(&candidate_tokens).count();
 
-    if union == 0 {
-        0
-    } else {
-        (common * 100) / union
-    }
+    // Both sets are non-empty, so `union >= 1`. Scores for real titles are tiny;
+    // saturate instead of wrapping on absurd inputs.
+    let percent = common.saturating_mul(100) / union.max(1);
+    i32::try_from(percent).unwrap_or(i32::MAX)
 }
 
 fn match_score(target: &str, candidate: &str) -> i32 {
@@ -184,6 +197,14 @@ fn is_non_game_type(app_type: &str) -> bool {
         kind.as_str(),
         "dlc" | "demo" | "advertising" | "video" | "movie" | "episode" | "series" | "mod" | "music"
     )
+}
+
+/// A Steam Store search hit scored against the Lutris game title.
+#[derive(Debug, Clone)]
+struct Candidate {
+    app_id: u32,
+    score: i32,
+    name: String,
 }
 
 /// Resolve a Steam app for fallback matching.
@@ -222,13 +243,6 @@ async fn resolve_steam_app(
         return Ok(None);
     }
 
-    #[derive(Debug, Clone)]
-    struct Candidate {
-        app_id: u32,
-        score: i32,
-        name: String,
-    }
-
     let mut candidates: Vec<Candidate> = Vec::new();
 
     for query in queries {
@@ -264,11 +278,7 @@ async fn resolve_steam_app(
         return Ok(None);
     }
 
-    candidates.sort_by(|a, b| {
-        b.score
-            .cmp(&a.score)
-            .then_with(|| a.name.len().cmp(&b.name.len()))
-    });
+    candidates.sort_by_key(|c| (Reverse(c.score), c.name.len()));
     candidates.truncate(5);
 
     let mut game_matches: Vec<(SteamAppDetails, i32)> = Vec::new();
@@ -295,7 +305,7 @@ async fn resolve_steam_app(
         return Ok(None);
     }
 
-    game_matches.sort_by(|a, b| b.1.cmp(&a.1));
+    game_matches.sort_by_key(|m| Reverse(m.1));
 
     let second_best = game_matches.get(1).map_or(0, |m| m.1);
     let (best_details, best_score) = game_matches.remove(0);
@@ -341,123 +351,57 @@ pub struct DownloadOpts {
     pub force: bool,
 }
 
-/// Download a single asset for a game, sending progress through the channel.
-async fn download_single_asset(
-    sgdb_client: &SteamGridDbClient,
-    steam_client: &SteamStoreClient,
+/// Resolved per-game fetch context shared across that game's asset downloads.
+///
+/// Bundles the references a single-asset download needs so the pipeline
+/// functions stay small and callable per asset type.
+struct GameFetchCtx<'a> {
+    sgdb_client: &'a SteamGridDbClient,
+    steam_client: &'a SteamStoreClient,
     game_id: Option<u64>,
-    steam_app: Option<&SteamAppDetails>,
-    game: &Game,
-    asset: AssetType,
-    opts: &DownloadOpts,
-    tx: &mpsc::UnboundedSender<DownloadProgress>,
-) {
-    let slug = &game.slug;
+    steam_app: Option<&'a SteamAppDetails>,
+    game: &'a Game,
+    opts: &'a DownloadOpts,
+    tx: &'a mpsc::UnboundedSender<DownloadProgress>,
+}
+
+impl GameFetchCtx<'_> {
+    /// Send a progress update for one asset of this context's game.
+    fn send(&self, asset: AssetType, status: DownloadStatus) {
+        let _ = self.tx.send(DownloadProgress {
+            game_slug: self.game.slug.clone(),
+            asset_type: asset,
+            status,
+        });
+    }
+}
+
+/// Download a single asset for a game, sending progress through the channel.
+async fn download_single_asset(ctx: &GameFetchCtx<'_>, asset: AssetType) {
+    let slug = &ctx.game.slug;
 
     // Check existence
-    if !opts.force && asset_exists(asset, slug) {
-        let _ = tx.send(DownloadProgress {
-            game_slug: slug.clone(),
-            asset_type: asset,
-            status: DownloadStatus::Skipped("already exists".into()),
-        });
+    if !ctx.opts.force && asset_exists(asset, slug) {
+        ctx.send(asset, DownloadStatus::Skipped("already exists".into()));
         return;
     }
 
     // Notify: downloading
-    let _ = tx.send(DownloadProgress {
-        game_slug: slug.clone(),
-        asset_type: asset,
-        status: DownloadStatus::Downloading,
-    });
-
-    // Fetch asset list
-    let dimensions: Option<&str> = if asset == AssetType::Grid {
-        Some(&opts.grid_dim)
-    } else {
-        None
-    };
+    ctx.send(asset, DownloadStatus::Downloading);
 
     let mut sgdb_error: Option<String> = None;
-    if let Some(game_id) = game_id {
-        // Try platform-specific endpoint first for steam games.
-        let assets_result = if game.service.as_deref() == Some("steam") {
-            if let Some(ref sid) = game.service_id {
-                sgdb_client
-                    .get_assets_by_platform(asset, "steam", sid.as_str(), dimensions)
-                    .await
-            } else {
-                sgdb_client.get_assets(asset, game_id, dimensions).await
-            }
-        } else {
-            sgdb_client.get_assets(asset, game_id, dimensions).await
-        };
-
-        match assets_result {
-            Ok(assets) => {
-                if let Some(chosen) = filter_assets(&assets, opts.nsfw_filter, opts.humor_filter) {
-                    let image_url = chosen.url.clone();
-                    match sgdb_client.download_image(&image_url).await {
-                        Ok(bytes) if !bytes.is_empty() => {
-                            match save_asset_to_disk(asset, slug, &bytes).await {
-                                Ok(target) => {
-                                    let _ = tx.send(DownloadProgress {
-                                        game_slug: slug.clone(),
-                                        asset_type: asset,
-                                        status: DownloadStatus::Done(target),
-                                    });
-                                    return;
-                                }
-                                Err(e) => {
-                                    sgdb_error = Some(format!("save error: {e}"));
-                                }
-                            }
-                        }
-                        Ok(_) => {
-                            sgdb_error = Some("downloaded 0 bytes from SteamGridDB".into());
-                        }
-                        Err(e) => {
-                            sgdb_error = Some(format!("SteamGridDB download error: {e}"));
-                        }
-                    }
-                } else {
-                    sgdb_error = Some("no art found on SteamGridDB".into());
-                }
-            }
-            Err(e) => {
-                sgdb_error = Some(format!("SteamGridDB fetch error: {e}"));
-            }
+    if ctx.game_id.is_some() {
+        match fetch_from_steamgriddb(ctx, asset).await {
+            Ok(()) => return, // success notice already sent
+            Err(message) => sgdb_error = Some(message),
         }
     }
 
     let mut steam_error: Option<String> = None;
-    if let Some(details) = steam_app {
-        let candidate_urls = steam_client.candidate_image_urls(asset, details, &opts.grid_dim);
-        for image_url in candidate_urls {
-            let bytes = match steam_client.download_image(&image_url).await {
-                Ok(b) if !b.is_empty() => b,
-                Ok(_) => continue,
-                Err(_) => continue,
-            };
-
-            match save_asset_to_disk(asset, slug, &bytes).await {
-                Ok(target) => {
-                    let _ = tx.send(DownloadProgress {
-                        game_slug: slug.clone(),
-                        asset_type: asset,
-                        status: DownloadStatus::Done(target),
-                    });
-                    return;
-                }
-                Err(e) => {
-                    steam_error = Some(format!("save error: {e}"));
-                    break;
-                }
-            }
-        }
-
-        if steam_error.is_none() {
-            steam_error = Some("no art found on Steam Store".into());
+    if ctx.steam_app.is_some() {
+        match fetch_from_steam_store(ctx, asset).await {
+            Ok(()) => return, // success notice already sent
+            Err(message) => steam_error = Some(message),
         }
     } else if sgdb_error.is_some() {
         steam_error = Some("Steam Store fallback unavailable (no app match)".into());
@@ -470,11 +414,85 @@ async fn download_single_asset(
         (None, None) => "no art source available".into(),
     };
 
-    let _ = tx.send(DownloadProgress {
-        game_slug: slug.clone(),
-        asset_type: asset,
-        status: DownloadStatus::Failed(message),
-    });
+    ctx.send(asset, DownloadStatus::Failed(message));
+}
+
+/// Try the `SteamGridDB` source for one asset.
+///
+/// Sends `Done` on success. Returns `Err(message)` when nothing usable was
+/// found so the caller can fall through to the next source.
+async fn fetch_from_steamgriddb(ctx: &GameFetchCtx<'_>, asset: AssetType) -> Result<(), String> {
+    let Some(game_id) = ctx.game_id else {
+        return Err("no SteamGridDB game id".into());
+    };
+
+    let dimensions: Option<&str> = if asset == AssetType::Grid {
+        Some(ctx.opts.grid_dim.as_str())
+    } else {
+        None
+    };
+
+    // Try platform-specific endpoint first for steam games.
+    let assets_result = if ctx.game.service.as_deref() == Some("steam") {
+        if let Some(ref sid) = ctx.game.service_id {
+            ctx.sgdb_client
+                .get_assets_by_platform(asset, "steam", sid.as_str(), dimensions)
+                .await
+        } else {
+            ctx.sgdb_client.get_assets(asset, game_id, dimensions).await
+        }
+    } else {
+        ctx.sgdb_client.get_assets(asset, game_id, dimensions).await
+    };
+
+    let assets = assets_result.map_err(|e| format!("SteamGridDB fetch error: {e}"))?;
+    let chosen = filter_assets(&assets, ctx.opts.nsfw_filter, ctx.opts.humor_filter)
+        .ok_or_else(|| "no art found on SteamGridDB".to_owned())?;
+
+    let bytes = ctx
+        .sgdb_client
+        .download_image(&chosen.url)
+        .await
+        .map_err(|e| format!("SteamGridDB download error: {e}"))?;
+    if bytes.is_empty() {
+        return Err("downloaded 0 bytes from SteamGridDB".into());
+    }
+
+    match save_asset_to_disk(asset, &ctx.game.slug, &bytes).await {
+        Ok(target) => {
+            ctx.send(asset, DownloadStatus::Done(target));
+            Ok(())
+        }
+        Err(e) => Err(format!("save error: {e}")),
+    }
+}
+
+/// Try the Steam Store CDN fallback for one asset.
+///
+/// Sends `Done` on success. Returns `Err(message)` when nothing usable was
+/// found so the caller can report the combined failure.
+async fn fetch_from_steam_store(ctx: &GameFetchCtx<'_>, asset: AssetType) -> Result<(), String> {
+    let Some(details) = ctx.steam_app else {
+        return Err("Steam Store fallback unavailable (no app match)".into());
+    };
+
+    let candidate_urls = SteamStoreClient::candidate_image_urls(asset, details, &ctx.opts.grid_dim);
+    for image_url in candidate_urls {
+        let bytes = match ctx.steam_client.download_image(&image_url).await {
+            Ok(b) if !b.is_empty() => b,
+            Ok(_) | Err(_) => continue,
+        };
+
+        match save_asset_to_disk(asset, &ctx.game.slug, &bytes).await {
+            Ok(target) => {
+                ctx.send(asset, DownloadStatus::Done(target));
+                return Ok(());
+            }
+            Err(e) => return Err(format!("save error: {e}")),
+        }
+    }
+
+    Err("no art found on Steam Store".into())
 }
 
 /// Write bytes to disk atomically: write to `.tmp` then rename.
@@ -564,18 +582,17 @@ pub async fn download_all(
         }
 
         // Download each selected asset type for this game
+        let ctx = GameFetchCtx {
+            sgdb_client,
+            steam_client,
+            game_id: sgdb_game_id,
+            steam_app: steam_app.as_ref(),
+            game,
+            opts,
+            tx: &tx,
+        };
         for &asset in assets {
-            download_single_asset(
-                sgdb_client,
-                steam_client,
-                sgdb_game_id,
-                steam_app.as_ref(),
-                game,
-                asset,
-                opts,
-                &tx,
-            )
-            .await;
+            download_single_asset(&ctx, asset).await;
         }
     }
 }

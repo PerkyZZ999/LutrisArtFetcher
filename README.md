@@ -16,11 +16,11 @@ A fast, interactive TUI application that downloads cover art (grids, heroes, log
 - **Headless mode** — `--no-tui` for scripting and CI
 - **Dry-run mode** — `--dry-run` to preview what would be downloaded
 - **XDG config** — persists API key and preferences at `~/.config/lutrisartfetcher/config.toml`
-- **Vim keybindings** — `j`/`k` navigation, space to toggle, `?` for help
+- **Vim keybindings** — `j`/`k` navigation, `Space` to select games, `/` to filter, `?` for help
 
 ## Requirements
 
-- Rust 1.80+ (builds SQLite from source via `rusqlite` bundled feature)
+- Rust 1.85+ (builds SQLite from source via `rusqlite` bundled feature)
 - A [SteamGridDB API key](https://www.steamgriddb.com/profile/preferences/api) (free, still required)
 - No Steam API key required for Steam Store fetching
 - Lutris installed with at least one game
@@ -76,7 +76,7 @@ cargo run --release
 
 1. Enter your SteamGridDB API key (saved for future runs)
 2. Select which asset types to download
-3. Review your game list
+3. Review your game list — `Space` to select, `/` to filter
 4. Press Enter to start downloading
 5. Watch real-time progress
 
@@ -140,10 +140,12 @@ Restart Lutris after downloading to see the new art.
 | `k` / `↑` | Move up |
 | `PgDn` / `PgUp` | Page down / up |
 | `Home` / `End` | Jump to first / last |
-| `Space` | Toggle selection |
-| `a` | Toggle all |
-| `Enter` | Confirm / proceed |
-| `q` / `Esc` | Quit / go back |
+| `Space` | Toggle selection (assets & games) |
+| `a` | Toggle all (assets & shown games) |
+| `/` | Filter game list by name |
+| `C` | Clear game filter |
+| `Enter` | Confirm / start downloads |
+| `q` / `Esc` | Quit / go back (clears filter first) |
 | `?` | Toggle help |
 | `Ctrl+C` | Force quit |
 

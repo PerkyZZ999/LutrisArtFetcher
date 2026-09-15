@@ -65,6 +65,7 @@ pub enum LogLevel {
 // ---------------------------------------------------------------------------
 
 /// Root application state.
+#[allow(clippy::struct_excessive_bools)]
 pub struct App {
     pub screen: AppScreen,
     pub games: Vec<GameEntry>,
@@ -77,6 +78,10 @@ pub struct App {
     pub force_download: bool,
     /// Spinner animation frame counter.
     pub tick_count: u64,
+    /// Live filter text for the game list (`/` to edit).
+    pub filter_query: String,
+    /// Whether the filter input is currently focused (typing).
+    pub filter_active: bool,
 }
 
 impl App {
@@ -111,7 +116,56 @@ impl App {
             show_help: false,
             force_download: force,
             tick_count: 0,
+            filter_query: String::new(),
+            filter_active: false,
         }
+    }
+
+    /// Indices into `self.games` that match the current filter (case-insensitive
+    /// substring over name, slug and runner). Returns all indices when empty.
+    pub fn visible_indices(&self) -> Vec<usize> {
+        if self.filter_query.trim().is_empty() {
+            return (0..self.games.len()).collect();
+        }
+        let q = self.filter_query.to_lowercase();
+        self.games
+            .iter()
+            .enumerate()
+            .filter(|(_, e)| {
+                e.game.name.to_lowercase().contains(&q)
+                    || e.game.slug.to_lowercase().contains(&q)
+                    || e.game
+                        .runner
+                        .as_deref()
+                        .unwrap_or_default()
+                        .to_lowercase()
+                        .contains(&q)
+            })
+            .map(|(i, _)| i)
+            .collect()
+    }
+
+    /// Real game index for the current list cursor (which addresses the filtered view).
+    pub fn visible_cursor_real_index(&self) -> Option<usize> {
+        let visible = self.visible_indices();
+        let cursor = self.list_state.selected()?;
+        visible.get(cursor).copied()
+    }
+
+    /// Number of games currently selected for download.
+    pub fn selected_count(&self) -> usize {
+        self.games.iter().filter(|e| e.selected).count()
+    }
+
+    /// Ensure the list cursor stays within the filtered view after filter edits.
+    fn clamp_cursor_to_visible(&mut self) {
+        let len = self.visible_indices().len();
+        if len == 0 {
+            self.list_state.select(None);
+            return;
+        }
+        let cur = self.list_state.selected().unwrap_or(0).min(len - 1);
+        self.list_state.select(Some(cur));
     }
 
     /// Handle a key event, dispatching based on current screen.
@@ -261,15 +315,64 @@ impl App {
 
     // -- GameList -----------------------------------------------------------
 
-    fn handle_game_list(&mut self, key: KeyEvent, tx: &UnboundedSender<AppEvent>) {
-        let len = self.games.len();
-        if len == 0 {
-            if matches!(key.code, KeyCode::Char('q') | KeyCode::Esc) {
-                self.should_quit = true;
+    /// Handle keystrokes while the `/` filter input is focused.
+    fn handle_filter_typing(&mut self, key: KeyEvent) {
+        match key.code {
+            KeyCode::Enter => {
+                self.filter_active = false;
+                self.clamp_cursor_to_visible();
             }
-            return;
+            KeyCode::Esc => {
+                self.filter_active = false;
+                self.filter_query.clear();
+                self.clamp_cursor_to_visible();
+            }
+            KeyCode::Backspace => {
+                self.filter_query.pop();
+                self.clamp_cursor_to_visible();
+            }
+            KeyCode::Char(c) => {
+                self.filter_query.push(c);
+                // Jump to top on each keystroke so results are visible.
+                self.list_state.select(Some(0));
+                self.clamp_cursor_to_visible();
+            }
+            _ => {}
         }
+    }
 
+    /// Toggle selection for the currently highlighted game.
+    fn toggle_highlighted(&mut self) {
+        if let Some(real) = self.visible_cursor_real_index() {
+            if let Some(entry) = self.games.get_mut(real) {
+                entry.selected = !entry.selected;
+            }
+        }
+    }
+
+    /// Toggle selection for every game in the current filtered view.
+    fn toggle_all_visible(&mut self, visible: &[usize]) {
+        let all_selected = visible
+            .iter()
+            .all(|&i| self.games.get(i).is_some_and(|e| e.selected));
+        for &i in visible {
+            if let Some(entry) = self.games.get_mut(i) {
+                entry.selected = !all_selected;
+            }
+        }
+    }
+
+    /// Quit, or clear the filter first when one is active.
+    fn quit_or_clear_filter(&mut self) {
+        if self.filter_query.is_empty() {
+            self.should_quit = true;
+        } else {
+            self.filter_query.clear();
+            self.clamp_cursor_to_visible();
+        }
+    }
+
+    fn move_cursor(&mut self, len: usize, key: KeyEvent) {
         match key.code {
             KeyCode::Up | KeyCode::Char('k') => {
                 let i = self.list_state.selected().unwrap_or(0);
@@ -279,12 +382,8 @@ impl App {
                 let i = self.list_state.selected().unwrap_or(0);
                 self.list_state.select(Some((i + 1).min(len - 1)));
             }
-            KeyCode::Home => {
-                self.list_state.select(Some(0));
-            }
-            KeyCode::End => {
-                self.list_state.select(Some(len - 1));
-            }
+            KeyCode::Home => self.list_state.select(Some(0)),
+            KeyCode::End => self.list_state.select(Some(len - 1)),
             KeyCode::PageUp => {
                 let i = self.list_state.selected().unwrap_or(0);
                 self.list_state.select(Some(i.saturating_sub(10)));
@@ -293,12 +392,67 @@ impl App {
                 let i = self.list_state.selected().unwrap_or(0);
                 self.list_state.select(Some((i + 10).min(len - 1)));
             }
+            _ => {}
+        }
+    }
+
+    fn handle_game_list(&mut self, key: KeyEvent, tx: &UnboundedSender<AppEvent>) {
+        // Filter typing mode takes over all keys except Ctrl+C (handled globally).
+        if self.filter_active {
+            self.handle_filter_typing(key);
+            return;
+        }
+
+        let visible = self.visible_indices();
+        let len = visible.len();
+
+        // Empty filtered view: allow clearing / quitting only.
+        if self.games.is_empty() || len == 0 {
+            match key.code {
+                KeyCode::Char('q') | KeyCode::Esc => self.quit_or_clear_filter(),
+                KeyCode::Char('/') => {
+                    self.filter_active = true;
+                }
+                KeyCode::Char('C') => {
+                    self.filter_query.clear();
+                    self.clamp_cursor_to_visible();
+                }
+                _ => {}
+            }
+            return;
+        }
+
+        match key.code {
+            KeyCode::Up
+            | KeyCode::Down
+            | KeyCode::Home
+            | KeyCode::End
+            | KeyCode::PageUp
+            | KeyCode::PageDown
+            | KeyCode::Char('k' | 'j') => {
+                self.move_cursor(len, key);
+            }
+            KeyCode::Char(' ') => self.toggle_highlighted(),
+            KeyCode::Char('a') => self.toggle_all_visible(&visible),
+            KeyCode::Char('/') => {
+                self.filter_active = true;
+            }
+            KeyCode::Char('C') => {
+                self.filter_query.clear();
+                self.clamp_cursor_to_visible();
+            }
             KeyCode::Enter => {
+                if self.selected_count() == 0 {
+                    self.log(
+                        LogLevel::Warn,
+                        "Nothing selected — press Space to select games".into(),
+                    );
+                    return;
+                }
+                self.filter_active = false;
                 self.start_downloads(tx);
             }
-            KeyCode::Esc | KeyCode::Char('q') => {
-                self.should_quit = true;
-            }
+            KeyCode::Esc | KeyCode::Char('q') => self.quit_or_clear_filter(),
             _ => {}
         }
     }
@@ -323,14 +477,32 @@ impl App {
 
     /// Kick off the download pipeline in a background task.
     fn start_downloads(&mut self, tx: &UnboundedSender<AppEvent>) {
-        let total = self.games.len() * self.selected_assets.len();
+        let selected_games: Vec<Game> = self
+            .games
+            .iter()
+            .filter(|e| e.selected)
+            .map(|e| e.game.clone())
+            .collect();
+        if selected_games.is_empty() {
+            self.log(
+                LogLevel::Warn,
+                "Nothing selected — press Space to select games".into(),
+            );
+            return;
+        }
+        let total = selected_games.len() * self.selected_assets.len().max(1);
         self.screen = AppScreen::Downloading {
             current: 0,
             total,
             started_at: Instant::now(),
         };
 
-        let games: Vec<Game> = self.games.iter().map(|e| e.game.clone()).collect();
+        self.log(
+            LogLevel::Info,
+            format!("Starting downloads for {} game(s)…", selected_games.len()),
+        );
+
+        let games: Vec<Game> = selected_games;
         let assets = self.selected_assets.clone();
         let grid_dim = self.config.preferred_grid_dimension.clone();
         let nsfw = self.config.nsfw_filter;
@@ -489,7 +661,7 @@ impl App {
         let mut skipped = 0usize;
         let mut failed = 0usize;
 
-        for entry in &self.games {
+        for entry in self.games.iter().filter(|e| e.selected) {
             for &asset in &self.selected_assets {
                 match entry.status(asset) {
                     DownloadStatus::Done(_) => downloaded += 1,
@@ -534,5 +706,116 @@ async fn validate_and_store_key(api_key: String) -> Result<()> {
         Ok(())
     } else {
         Err(color_eyre::eyre::eyre!("API key rejected by SteamGridDB"))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::config::Config;
+
+    fn sample_games() -> Vec<Game> {
+        vec![
+            Game {
+                id: 1,
+                name: "Half-Life 2".to_owned(),
+                slug: "half-life-2".to_owned(),
+                runner: Some("steam".to_owned()),
+                platform: None,
+                service: Some("steam".to_owned()),
+                service_id: Some("220".to_owned()),
+                has_custom_banner: false,
+                has_custom_coverart: false,
+            },
+            Game {
+                id: 2,
+                name: "Portal".to_owned(),
+                slug: "portal".to_owned(),
+                runner: Some("steam".to_owned()),
+                platform: None,
+                service: Some("steam".to_owned()),
+                service_id: Some("400".to_owned()),
+                has_custom_banner: false,
+                has_custom_coverart: false,
+            },
+            Game {
+                id: 3,
+                name: "Celeste".to_owned(),
+                slug: "celeste".to_owned(),
+                runner: Some("linux".to_owned()),
+                platform: None,
+                service: None,
+                service_id: None,
+                has_custom_banner: false,
+                has_custom_coverart: false,
+            },
+        ]
+    }
+
+    fn sample_app() -> App {
+        let config = Config {
+            api_key: Some("test-key".to_owned()),
+            ..Config::default()
+        };
+        let assets: HashSet<AssetType> = AssetType::all().iter().copied().collect();
+        App::new(config, sample_games(), assets, false)
+    }
+
+    #[test]
+    fn new_games_start_selected() {
+        let app = sample_app();
+        assert_eq!(app.selected_count(), 3);
+        assert_eq!(app.visible_indices(), vec![0, 1, 2]);
+    }
+
+    #[test]
+    fn filter_matches_name_slug_and_runner() {
+        let mut app = sample_app();
+        app.filter_query = "portal".to_owned();
+        assert_eq!(app.visible_indices(), vec![1]);
+        app.filter_query = "half-life".to_owned();
+        assert_eq!(app.visible_indices(), vec![0]);
+        app.filter_query = "linux".to_owned();
+        assert_eq!(app.visible_indices(), vec![2]);
+        app.filter_query = "no-such-game".to_owned();
+        assert!(app.visible_indices().is_empty());
+    }
+
+    #[test]
+    fn toggle_all_visible_only_affects_filtered() {
+        let mut app = sample_app();
+        app.filter_query = "portal".to_owned();
+        let visible = app.visible_indices();
+        app.toggle_all_visible(&visible);
+        assert!(!app.games[1].selected);
+        assert!(app.games[0].selected);
+        assert!(app.games[2].selected);
+        // Toggling again re-selects.
+        let visible = app.visible_indices();
+        app.toggle_all_visible(&visible);
+        assert!(app.games[1].selected);
+    }
+
+    #[test]
+    fn quit_or_clear_prefers_clearing_filter() {
+        let mut app = sample_app();
+        app.filter_query = "portal".to_owned();
+        app.quit_or_clear_filter();
+        assert!(app.filter_query.is_empty());
+        assert!(!app.should_quit);
+        app.quit_or_clear_filter();
+        assert!(app.should_quit);
+    }
+
+    #[test]
+    fn clamp_cursor_stays_in_filtered_view() {
+        let mut app = sample_app();
+        app.list_state.select(Some(2));
+        app.filter_query = "portal".to_owned();
+        app.clamp_cursor_to_visible();
+        assert_eq!(app.list_state.selected(), Some(0));
+        app.filter_query = "no-such-game".to_owned();
+        app.clamp_cursor_to_visible();
+        assert_eq!(app.list_state.selected(), None);
     }
 }

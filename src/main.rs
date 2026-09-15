@@ -136,7 +136,7 @@ async fn run_tui(
 
     loop {
         terminal
-            .draw(|frame| ui::render(frame, &app))
+            .draw(|frame| ui::render(frame, &mut app))
             .wrap_err("Failed to render frame")?;
 
         match events.next().await? {
@@ -242,11 +242,10 @@ async fn run_headless(
                 failed += 1;
                 println!("  ✗ {display} — {} failed: {msg}", progress.asset_type);
             }
-            api::models::DownloadStatus::Searching => {}
+            api::models::DownloadStatus::Searching | api::models::DownloadStatus::Pending => {}
             api::models::DownloadStatus::Downloading => {
                 println!("  ↓ {display} — downloading {}", progress.asset_type);
             }
-            api::models::DownloadStatus::Pending => {}
         }
     }
 

@@ -181,7 +181,6 @@ impl SteamStoreClient {
 
     /// Build candidate Steam CDN URLs for an asset type.
     pub fn candidate_image_urls(
-        &self,
         asset: AssetType,
         details: &SteamAppDetails,
         grid_dim: &str,

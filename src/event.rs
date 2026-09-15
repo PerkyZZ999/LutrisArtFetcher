@@ -42,10 +42,7 @@ impl EventHandler {
         let tx_input = tx.clone();
         tokio::spawn(async move {
             let mut reader = EventStream::new();
-            loop {
-                let Some(event_result) = reader.next().await else {
-                    break;
-                };
+            while let Some(event_result) = reader.next().await {
                 let Ok(event) = event_result else {
                     continue;
                 };

@@ -1,0 +1,52 @@
+# Rust-Toolchain dependency policy.
+# Review licenses, bans, and sources for the target project.
+# See https://embarkstudios.github.io/cargo-deny/ for full options.
+
+[graph]
+targets = [
+    { triple = "x86_64-unknown-linux-gnu" },
+]
+all-features = true
+
+[advisories]
+yanked = "deny"
+ignore = [
+    # RUSTSEC-2024-0436: `paste` is unmaintained but has no known vulnerability.
+    # It is a build-time proc-macro pulled in by ratatui 0.29 and cannot be
+    # upgraded away without migrating the TUI framework. Revisit on ratatui upgrade.
+    "RUSTSEC-2024-0436",
+]
+
+[licenses]
+version = 2
+allow = [
+    "MIT",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "ISC",
+    "Unicode-3.0",
+    "Zlib",
+    # option-ext (via dirs): file-scoped copyleft, linked unmodified in this
+    # binary — permitted for a larger work, no obligations on our own code.
+    "MPL-2.0",
+]
+unused-allowed-license = "allow"
+confidence-threshold = 0.8
+
+[bans]
+multiple-versions = "warn"
+wildcards = "deny"
+highlight = "all"
+workspace-default-features = "allow"
+external-default-features = "allow"
+deny = []
+skip = []
+skip-tree = []
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
+allow-git = []
