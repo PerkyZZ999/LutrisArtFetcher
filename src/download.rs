@@ -19,12 +19,12 @@ use crate::db::Game;
 #[allow(dead_code)]
 pub struct GameEntry {
     pub game: Game,
+    /// Whether this game is selected for download (toggled with Space in the TUI).
+    pub selected: bool,
     pub grid_status: DownloadStatus,
     pub hero_status: DownloadStatus,
     pub logo_status: DownloadStatus,
     pub icon_status: DownloadStatus,
-    /// Whether this game is selected for download (toggled with Space in the TUI).
-    pub selected: bool,
     /// Cached `SteamGridDB` game ID after first successful search.
     pub steamgriddb_id: Option<u64>,
 }
@@ -33,11 +33,11 @@ impl GameEntry {
     pub fn new(game: Game) -> Self {
         Self {
             game,
+            selected: true,
             grid_status: DownloadStatus::Pending,
             hero_status: DownloadStatus::Pending,
             logo_status: DownloadStatus::Pending,
             icon_status: DownloadStatus::Pending,
-            selected: true,
             steamgriddb_id: None,
         }
     }

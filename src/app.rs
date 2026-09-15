@@ -376,6 +376,16 @@ impl App {
         }
     }
 
+    /// Go back to asset selection, clearing the filter first when one is active.
+    fn back_or_clear_filter(&mut self) {
+        if self.filter_query.is_empty() {
+            self.screen = AppScreen::AssetTypeSelection { cursor: 0 };
+        } else {
+            self.filter_query.clear();
+            self.clamp_cursor_to_visible();
+        }
+    }
+
     fn move_cursor(&mut self, len: usize, key: KeyEvent) {
         match key.code {
             KeyCode::Up | KeyCode::Char('k') => {
@@ -410,10 +420,11 @@ impl App {
         let visible = self.visible_indices();
         let len = visible.len();
 
-        // Empty filtered view: allow clearing / quitting only.
+        // Empty filtered view: allow clearing / navigating back only.
         if self.games.is_empty() || len == 0 {
             match key.code {
-                KeyCode::Char('q') | KeyCode::Esc => self.quit_or_clear_filter(),
+                KeyCode::Char('q') => self.quit_or_clear_filter(),
+                KeyCode::Esc => self.back_or_clear_filter(),
                 KeyCode::Char('/') => {
                     self.filter_active = true;
                 }
@@ -456,7 +467,8 @@ impl App {
                 self.filter_active = false;
                 self.start_downloads(tx);
             }
-            KeyCode::Esc | KeyCode::Char('q') => self.quit_or_clear_filter(),
+            KeyCode::Esc => self.back_or_clear_filter(),
+            KeyCode::Char('q') => self.quit_or_clear_filter(),
             _ => {}
         }
     }
@@ -659,7 +671,7 @@ impl App {
         }
     }
 
-    /// Count terminal statuses across all game entries.
+    /// Count terminal statuses across selected game entries.
     fn count_results(&self) -> (usize, usize, usize) {
         let mut downloaded = 0usize;
         let mut skipped = 0usize;
@@ -887,5 +899,25 @@ mod tests {
             }
             other => panic!("expected Downloading, got {other:?}"),
         }
+    }
+
+    #[test]
+    fn esc_goes_back_to_asset_selection() {
+        let (mut app, tx) = game_list_app();
+        press(&mut app, &tx, KeyCode::Esc);
+        assert!(matches!(app.screen, AppScreen::AssetTypeSelection { .. }));
+    }
+
+    #[test]
+    fn esc_clears_filter_before_going_back() {
+        let (mut app, tx) = game_list_app();
+        app.filter_query = "portal".to_owned();
+
+        press(&mut app, &tx, KeyCode::Esc);
+        assert!(app.filter_query.is_empty());
+        assert!(matches!(app.screen, AppScreen::GameList));
+
+        press(&mut app, &tx, KeyCode::Esc);
+        assert!(matches!(app.screen, AppScreen::AssetTypeSelection { .. }));
     }
 }

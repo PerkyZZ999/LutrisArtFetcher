@@ -238,6 +238,7 @@ fn render_footer(frame: &mut Frame, area: Rect, app: &App) {
                 spans.extend(hint("a", "all"));
                 spans.extend(hint("/", "filter"));
                 spans.extend(hint("Enter", "fetch"));
+                spans.extend(hint("Esc", "back"));
                 spans.extend(hint("q", "quit"));
             }
         }
@@ -1127,13 +1128,18 @@ fn render_help_popup(frame: &mut Frame) {
         Line::from(""),
         section("General"),
         row("?", "toggle this help"),
-        row("q / Esc", "back · quit"),
+        row("Esc", "back · clear filter"),
+        row("q", "quit"),
         row("Ctrl+C", "force quit"),
         Line::from(""),
         Line::from(Span::styled(
             " Press any key or ? to close ",
             Style::default().fg(MUTED),
         )),
+        Line::from(" General"),
+        Line::from("  ?          Toggle this help"),
+        Line::from("  q          Quit"),
+        Line::from("  Ctrl+C     Force quit"),
     ];
 
     let popup = Paragraph::new(text).alignment(Alignment::Left);
