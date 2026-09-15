@@ -1,0 +1,44 @@
+# Maintainer: Charles Wilkin <PerkyZZ999@users.noreply.github.com>
+pkgname=lutrisartfetcher
+pkgver=0.1.0
+pkgrel=1
+pkgdesc='TUI tool to download cover art for Lutris games from SteamGridDB'
+arch=('x86_64')
+url='https://github.com/PerkyZZ999/LutrisArtFetcher'
+license=('MIT')
+depends=('gcc-libs' 'glibc')
+makedepends=('cargo')
+optdepends=('lutris: game library to fetch art for')
+# Distro plugin-LTO (-flto in CFLAGS + -Clinker-plugin-lto) breaks linking
+# of the bundled C libraries (SQLite, aws-lc): their symbols are dropped as
+# unneeded at link time. Our own fat LTO from Cargo.toml still applies.
+options=('!lto')
+source=("$pkgname-$pkgver.tar.gz::https://github.com/PerkyZZ999/LutrisArtFetcher/archive/refs/tags/v$pkgver.tar.gz")
+sha256sums=('12e6aedce8c6704b62f9ed0be4a5960d3f5614e67c2eee69e7c88f05b3a1d78d')
+
+# GitHub tag tarballs unpack to the repository name with its original case.
+_srcdir="LutrisArtFetcher-$pkgver"
+
+prepare() {
+  cd "$_srcdir"
+  cargo fetch --locked --target="$CARCH-unknown-linux-gnu"
+}
+
+build() {
+  cd "$_srcdir"
+  export CARGO_NET_OFFLINE=true
+  cargo build --release --locked
+}
+
+check() {
+  cd "$_srcdir"
+  export CARGO_NET_OFFLINE=true
+  cargo test --locked
+}
+
+package() {
+  cd "$_srcdir"
+  install -Dm755 "target/release/$pkgname" "$pkgdir/usr/bin/$pkgname"
+  install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+  install -Dm644 README.md "$pkgdir/usr/share/doc/$pkgname/README.md"
+}

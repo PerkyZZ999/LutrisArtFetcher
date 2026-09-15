@@ -1,0 +1,16 @@
+pkgbase = lutrisartfetcher
+	pkgdesc = TUI tool to download cover art for Lutris games from SteamGridDB
+	pkgver = 0.1.0
+	pkgrel = 1
+	url = https://github.com/PerkyZZ999/LutrisArtFetcher
+	arch = x86_64
+	license = MIT
+	makedepends = cargo
+	depends = gcc-libs
+	depends = glibc
+	optdepends = lutris: game library to fetch art for
+	options = !lto
+	source = lutrisartfetcher-0.1.0.tar.gz::https://github.com/PerkyZZ999/LutrisArtFetcher/archive/refs/tags/v0.1.0.tar.gz
+	sha256sums = 12e6aedce8c6704b62f9ed0be4a5960d3f5614e67c2eee69e7c88f05b3a1d78d
+
+pkgname = lutrisartfetcher

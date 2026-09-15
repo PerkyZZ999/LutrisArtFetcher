@@ -35,7 +35,7 @@ A fast, interactive TUI that downloads cover art (grids, heroes, logos, and icon
 Grab the latest release for Linux x86_64 — no Rust toolchain needed:
 
 ```bash
-curl -L -o lutrisartfetcher https://github.com/PerkyZZ999/LutrisArtFetcher/releases/download/v0.1.0/lutrisartfetcher-linux-x86_64
+curl -L -o lutrisartfetcher https://github.com/PerkyZZ999/LutrisArtFetcher/releases/latest/download/lutrisartfetcher-linux-x86_64
 chmod +x lutrisartfetcher
 ./lutrisartfetcher
 ```

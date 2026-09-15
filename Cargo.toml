@@ -1,6 +1,6 @@
 [package]
 name = "lutrisartfetcher"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 description = "TUI tool to download cover art for Lutris games from SteamGridDB"
 license = "MIT"
